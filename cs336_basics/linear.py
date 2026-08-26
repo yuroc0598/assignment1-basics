@@ -18,4 +18,4 @@ class Linear(nn.Module):
         trunc_normal_(self.weight, mean=0, std=std, a=-3.0 * std, b=3.0 * std)
 
     def forward(self, x):
-        return einsum(x, self.weight, "... in_features, out_features in_features -> ... out_features")
+        return einsum(self.weight, x, "out_features in_features, ... in_features  -> ... out_features")

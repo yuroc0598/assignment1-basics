@@ -2,7 +2,6 @@ import torch
 from torch import nn
 from torch.nn.init import trunc_normal_
 from torch.nn import Parameter
-from einops import einsum
 
 
 class Embedding(nn.Module):

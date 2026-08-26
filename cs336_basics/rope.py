@@ -3,24 +3,26 @@ from torch.nn import Module
 
 
 class Rope(Module):
-    def __init__(self, theta: float, d_k: int, max_seq_len: int, device=None):
+    def __init__(self, theta: float, dk: int, max_seq_len: int, device=None, dtype=None):
         super().__init__()
         self.theta = theta
-        self.d_k = d_k
+        self.d_k = dk
         self.max_seq_len = max_seq_len
-        self.device = device
         assert self.d_k % 2 == 0
         # theta(i, k) = i / base ^ (2k - 2)/d
         pos = torch.arange(self.max_seq_len, device=device)
-        sub = torch.arange(self.d_k // 2, device=device)
-        freq = self.theta ** ((-2 * sub) / d_k)
-        theta_matrix = pos[:, None] * freq[None, :]
-        cos = torch.cos(theta_matrix)
-        sin = torch.sin(theta_matrix)
-        self.register_buffer("cos", cos)
-        self.register_buffer("sin", sin)
+        dim = torch.arange(self.d_k // 2, device=device)
+        freq = self.theta ** ((-2 * dim) / dk)
+        angles = pos[:, None] * freq[None, :]
+        cos = torch.cos(angles)
+        sin = torch.sin(angles)
+        self.register_buffer("cos", cos, persistent=False)
+        self.register_buffer("sin", sin, persistent=False)
 
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
+        assert token_positions.max() < self.max_seq_len
+        assert x.shape[-1] == self.d_k
+        assert token_positions.ndim in [1, x.ndim - 1]
         even = x[..., ::2]
         odd = x[..., 1::2]
         cos = self.cos[token_positions]
