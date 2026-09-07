@@ -92,9 +92,9 @@ def run_swiglu(
     from cs336_basics.swiglu import SwiGlu
 
     swiglu = SwiGlu(d_model=d_model, d_ff=d_ff)
-    swiglu.linear1.load_state_dict({"weight": w1_weight})
-    swiglu.linear2.load_state_dict({"weight": w3_weight})
-    swiglu.linear3.load_state_dict({"weight": w2_weight})
+    swiglu.W1.load_state_dict({"weight": w1_weight})
+    swiglu.W3.load_state_dict({"weight": w3_weight})
+    swiglu.W2.load_state_dict({"weight": w2_weight})
     return swiglu.forward(in_features)
 
 
@@ -199,7 +199,14 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    from cs336_basics.cmsa import Cmsa
+
+    cmsa = Cmsa(d_model=d_model, num_heads=num_heads, max_seq_len=max_seq_len, theta=theta)
+    cmsa.k_proj.load_state_dict({"weight": k_proj_weight})
+    cmsa.q_proj.load_state_dict({"weight": q_proj_weight})
+    cmsa.v_proj.load_state_dict({"weight": v_proj_weight})
+    cmsa.output_proj.load_state_dict({"weight": o_proj_weight})
+    return cmsa(in_features, token_positions=token_positions)
 
 
 def run_rope(
@@ -297,7 +304,19 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    from cs336_basics.transformer_block import Transformer
+
+    t = Transformer(d_model=d_model, num_heads=num_heads, d_ff=d_ff, max_seq_len=max_seq_len, theta=theta)
+    t.cmsa.k_proj.load_state_dict({"weight": weights["attn.k_proj.weight"]})
+    t.cmsa.q_proj.load_state_dict({"weight": weights["attn.q_proj.weight"]})
+    t.cmsa.v_proj.load_state_dict({"weight": weights["attn.v_proj.weight"]})
+    t.cmsa.output_proj.load_state_dict({"weight": weights["attn.output_proj.weight"]})
+    t.rmsnorm_1.load_state_dict({"weight": weights["ln1.weight"]})
+    t.rmsnorm_2.load_state_dict({"weight": weights["ln2.weight"]})
+    t.swiglu.W1.load_state_dict({"weight": weights["ffn.w1.weight"]})
+    t.swiglu.W3.load_state_dict({"weight": weights["ffn.w3.weight"]})
+    t.swiglu.W2.load_state_dict({"weight": weights["ffn.w2.weight"]})
+    return t(in_features)
 
 
 def run_transformer_lm(
@@ -479,7 +498,9 @@ def run_cross_entropy(
     Returns:
         Float[Tensor, ""]: The average cross-entropy loss across examples.
     """
-    raise NotImplementedError
+    from cs336_basics.utils import cross_entropy
+
+    return cross_entropy(inputs, targets)
 
 
 def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm: float) -> None:
@@ -589,6 +610,7 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
+
     raise NotImplementedError
 
 
@@ -619,4 +641,8 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    raise NotImplementedError
+    from cs336_basics.bpe_opt import BPE
+
+    bpe = BPE(vocab_size=vocab_size, input_path=input_path, specials=special_tokens)
+    bpe.train()
+    return (bpe.vocab, bpe.merge_rules)

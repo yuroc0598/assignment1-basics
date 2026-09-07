@@ -19,27 +19,34 @@ class Cmsa(Module):
         self.q_proj = Linear(d_model, d_model, device=device, dtype=dtype)
         self.v_proj = Linear(d_model, d_model, device=device, dtype=dtype)
         self.output_proj = Linear(d_model, d_model, device=device, dtype=dtype)
+        self.register_buffer("mask", None, persistent=False)
         if max_seq_len is not None:
             if theta is not None:
                 self.theta = theta
             else:
                 self.theta = 10000
             self.max_seq_len = max_seq_len
+            self.mask = torch.tril(torch.ones(max_seq_len, max_seq_len, device=device, dtype=torch.bool))
             self.rope = Rope(self.theta, self.dk, self.max_seq_len, device=device, dtype=dtype)
         else:
             self.rope = None
 
     def forward(self, x: Tensor, token_positions: Tensor | None = None):
-        k = rearrange(self.k_proj(x), "b seq (h dk) -> b h seq dk", h=self.h)
-        q = rearrange(self.q_proj(x), "b seq (h dk) -> b h seq dk", h=self.h)
+        k = rearrange(self.k_proj(x), "... seq (h dk) -> ... h seq dk", h=self.h)
+        q = rearrange(self.q_proj(x), "... seq (h dk) -> ... h seq dk", h=self.h)
         seq = k.shape[-2]
         if self.rope is not None:
             if token_positions is None:
                 token_positions = torch.arange(seq, device=x.device)
             k = self.rope(k, token_positions)
             q = self.rope(q, token_positions)
-        v = rearrange(self.v_proj(x), "b seq (h dk) -> b h seq dk", h=self.h)
-        mask = torch.tril(torch.ones(seq, seq, device=x.device, dtype=torch.bool))
+        v = rearrange(self.v_proj(x), "... seq (h dk) -> ... h seq dk", h=self.h)
+        if self.mask is not None:
+            mask = self.mask[:seq, :seq]
+        else:
+            mask = torch.tril(torch.ones(seq, seq, device=x.device, dtype=torch.bool))
+        # FLOPs 4bssd + 2bhss
         dp = sdpa(q=q, k=k, v=v, mask=mask)
-        dp = rearrange(dp, "b h seq dk -> b seq (h dk)")
+        dp = rearrange(dp, "... h seq dk -> ... seq (h dk)")
+        # FLOPs 2BSDDD
         return self.output_proj(dp)
