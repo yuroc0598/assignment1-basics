@@ -103,7 +103,7 @@ class TransformerLM(Module):
 
     def forward(self, input_text):
         # raw input text -> tokenization -> embedding -> num_layers Transformer block
-        # -> Norm -> Linear -> softmax -> output probability
+        # -> Norm -> Linear -> softmax -> output logits
         token_ids = self.tokenizer.encode(input_text)  # B, S
         # go through num_layers transformer blocks
         x = self.embedding(token_ids)  # B, S, D

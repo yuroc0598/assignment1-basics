@@ -1,7 +1,6 @@
 import math
-from typing import Callable, Iterable, Optional
-
 import torch
+from typing import Callable, Iterable, Optional
 
 
 class AdamW(torch.optim.Optimizer):
@@ -72,3 +71,58 @@ class AdamW(torch.optim.Optimizer):
                 p.data.addcdiv_(m, v.sqrt().add_(eps), value=-alpha_t)
 
         return loss
+
+
+"""
+memory analaysis:
+
+let P be the number of parameters, so
+P=L(4D^2+3D*D_ff+2D)+2VD+D
+
+adamw has m and v, each parameter is 4bytes if using fp32, so static memory is 8P
+during step(), extra temp memory because of v.sqrt(), 4P
+so in total 12P for peak memory
+that is 12 * (L(4D^2+3D*D_ff+2D)+2VD+D)
+
+in the case of
+vocab_size: 50,257
+context_length: 1,024
+num_layers: 48
+d_model: 1,600
+num_heads: 25
+d_ff: 4,288 (the nearest multiple of 64 to 8/3 × 1, 600)
+
+Static memory: 12.22 GiB
+Peak during step(): 18.33 GiB
+
+so plus the memory of parameters themselves if using fp16/bf16 2bytes each
+
+total static memory: 16.4GB
+total peak memory:22.97GB
+
+if model params use fp32 as well
+total static: 18.33GB
+total peak: 24.44GB
+
+
+FLOPs per step(): 13 FLOPs
+
+│ m.mul_(beta1).add_(grad, alpha=1-beta1)           │ m ← β1·m + (1-β1)·g  │ 2 mults + 1 add = 3                      │
+  ├───────────────────────────────────────────────────┼──────────────────────┼──────────────────────────────────────────┤
+  │ v.mul_(beta2).addcmul_(grad, grad, value=1-beta2) │ v ← β2·v + (1-β2)·g² │ 3 mults (g·g, ·(1-β2), β2·v) + 1 add = 4 │
+  ├───────────────────────────────────────────────────┼──────────────────────┼──────────────────────────────────────────┤
+  │ p.data.mul_(1 - lr*weight_decay)                  │ θ ← θ·(1-αλ)         │ 1 mult                                   │
+  ├───────────────────────────────────────────────────┼──────────────────────┼──────────────────────────────────────────┤
+  │ v.sqrt().add_(eps)                                │ √v + ε               │ 1 sqrt + 1 add = 2                       │
+  ├───────────────────────────────────────────────────┼──────────────────────┼──────────────────────────────────────────┤
+  │ p.data.addcdiv_(m, ..., value=-alpha_t)           │ θ ← θ - α_t·m/denom  │ 1 div + 1 mult + 1 add = 3               │
+  └───────────────────────
+
+
+Total FLOPs = 5.546e21 (400,000 steps x 1.3865e16 FLOPs/step, where per-step = 3 x forward = 3 x 4.62e15).
+
+Achievable throughput = 495 TFLOP/s x 0.5 = 2.475e14 FLOP/s.
+
+Time = 5.546e21 / 2.475e14 = 2.241e7 seconds = 259 days = 8.5 months = 0.71 years.
+
+"""

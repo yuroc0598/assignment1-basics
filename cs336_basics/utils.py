@@ -1,6 +1,7 @@
 import math
 import torch
-from einops import einsum, reduce
+import numpy as np
+from einops import einsum
 from torch import Tensor
 
 
@@ -60,3 +61,39 @@ def cross_entropy(logits: Tensor, target: Tensor):
     loss = log - xi
     # loss has shape B S
     return loss.mean()
+
+
+def cos_learning_rate(t, alpha_max, alpha_min, Tw, Tc):
+    """
+    Warmup t < Tw: t * alpha_max / Tw
+    cosine annealing Tw <= t <= Tc: alpha_min + 1/2 *(1 + cos(pie * (t-Tw)/(Tc-Tw)))(alpha_max - alpha_min)
+    post-annealing t > Tc: alpha_min
+    """
+    if t < Tw:
+        return t * alpha_max / Tw
+    if Tw <= t <= Tc:
+        return alpha_min + 1 / 2 * (1 + math.cos(math.pi * (t - Tw) / (Tc - Tw))) * (alpha_max - alpha_min)
+    return alpha_min
+
+
+def gradient_clipping(params, M, eps=10**-6) -> None:
+    """
+    params: a list of Parameters
+    M: max l2-norm
+    update the gradients in-place
+    """
+    val = math.sqrt(sum(torch.sum(p.grad**2) for p in params if p.grad is not None))
+    if val > M:
+        fac = M / (eps + val)
+        for p in params:
+            if p.grad is not None:
+                p.grad.mul_(fac)
+
+
+def data_loading(x, batch_size, context_len, device):
+    starts = np.random.randint(0, len(x) - context_len, size=batch_size)
+    inputs = np.stack([x[i : i + context_len] for i in starts])
+    targets = np.stack([x[i + 1 : i + 1 + context_len] for i in starts])
+    inputs = torch.from_numpy(inputs).to(device)
+    targets = torch.from_numpy(targets).to(device)
+    return inputs, targets
