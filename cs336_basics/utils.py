@@ -3,6 +3,8 @@ import torch
 import numpy as np
 from einops import einsum
 from torch import Tensor
+import typing
+import os
 
 
 def softmax(x: torch.Tensor, dim: int = -1) -> torch.Tensor:
@@ -41,7 +43,7 @@ def sdpa(q: Tensor, k: Tensor, v: Tensor, mask: Tensor | None):
     return einsum(softmax(pre_softmax), v, "... s t, ... t dv -> ... s dv")
 
 
-def cross_entropy(logits: Tensor, target: Tensor):
+def cross_entropy(logits: Tensor, target: Tensor) -> Tensor:
     """
     input shape B S V
     target shape B S
@@ -91,9 +93,36 @@ def gradient_clipping(params, M, eps=10**-6) -> None:
 
 
 def data_loading(x, batch_size, context_len, device):
-    starts = np.random.randint(0, len(x) - context_len, size=batch_size)
-    inputs = np.stack([x[i : i + context_len] for i in starts])
-    targets = np.stack([x[i + 1 : i + 1 + context_len] for i in starts])
-    inputs = torch.from_numpy(inputs).to(device)
-    targets = torch.from_numpy(targets).to(device)
-    return inputs, targets
+    if len(x) <= context_len:
+        raise ValueError("dataset is shorter than context_len + 1")
+
+    starts = np.random.randint(
+        0,
+        len(x) - context_len,
+        size=batch_size,
+    )
+
+    batch = np.empty(
+        (batch_size, context_len + 1),
+        dtype=np.int64,
+    )
+
+    for row, start in enumerate(starts):
+        batch[row] = x[start : start + context_len + 1]
+
+    tokens = torch.from_numpy(batch).to(device)
+    return tokens[:, :-1], tokens[:, 1:]
+
+
+def save_checkpoint(
+    model: torch.nn.Module, optimizer: torch.optim.Optimizer, iteration: int, out: str | os.PathLike | typing.BinaryIO
+) -> None:
+    checkpoint = {"model": model.state_dict(), "optimizer": optimizer.state_dict(), "iteration": iteration}
+    torch.save(checkpoint, out)
+
+
+def load_checkpoint(src: str | os.PathLike | typing.BinaryIO | typing.IO[bytes], model, optimizer) -> int:
+    checkpoint = torch.load(src)
+    model.load_state_dict(checkpoint["model"])
+    optimizer.load_state_dict(checkpoint["optimizer"])
+    return checkpoint["iteration"]

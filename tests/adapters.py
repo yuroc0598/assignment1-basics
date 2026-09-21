@@ -576,7 +576,9 @@ def run_save_checkpoint(
             we've completed.
         out (str | os.PathLike | BinaryIO | IO[bytes]): Path or file-like object to serialize the model, optimizer, and iteration to.
     """
-    raise NotImplementedError
+    from cs336_basics.utils import save_checkpoint
+
+    save_checkpoint(model, optimizer, iteration, out)
 
 
 def run_load_checkpoint(
@@ -597,7 +599,9 @@ def run_load_checkpoint(
     Returns:
         int: the previously-serialized number of iterations.
     """
-    raise NotImplementedError
+    from cs336_basics.utils import load_checkpoint
+
+    return load_checkpoint(src, model, optimizer)
 
 
 def get_tokenizer(
@@ -620,8 +624,9 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
+    from cs336_basics.bpe_opt import BPE
 
-    raise NotImplementedError
+    return BPE(vocab=vocab, merges=merges, special_tokens=special_tokens)
 
 
 def run_train_bpe(
@@ -653,6 +658,6 @@ def run_train_bpe(
     """
     from cs336_basics.bpe_opt import BPE
 
-    bpe = BPE(vocab_size=vocab_size, input_path=input_path, specials=special_tokens)
+    bpe = BPE(vocab_size=vocab_size, input_path=input_path, special_tokens=special_tokens)
     bpe.train()
     return (bpe.vocab, bpe.merge_rules)

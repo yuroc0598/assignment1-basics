@@ -1,6 +1,7 @@
 import math
 import torch
 from typing import Callable, Iterable, Optional
+from cs336_basics.utils import cos_learning_rate
 
 
 class AdamW(torch.optim.Optimizer):

@@ -72,7 +72,7 @@ class TransformerLM(Module):
         num_heads: int,
         d_ff: int,
         theta: float = None,
-        specials: list = None,
+        special_tokens: list = None,
         device=None,
         dtype=None,
         *args,
@@ -89,23 +89,18 @@ class TransformerLM(Module):
         self.theta: float = theta
         self.device = device
         self.dtype = dtype
-        self.tokenizer = BPE(vocab_size, TOKENIZER_TRAINING_INPUT, specials or ["<|endoftext|>"], "<|endoftext|>")
-        self.train_tokenizer()
         self.transformer_blocks = ModuleList(
             [Transformer(d_model, num_heads, d_ff, context_len, theta, device, dtype) for _ in range(num_layers)]
         )
         self.norm = RMSNorm(d_model, device=device, dtype=dtype)
         self.linear = Linear(in_features=d_model, out_features=vocab_size, device=device, dtype=dtype)
-        self.embedding = Embedding(len(self.tokenizer.vocab), self.d_model, self.device, self.dtype)  # B, S, D
+        self.embedding = Embedding(vocab_size, self.d_model, self.device, self.dtype)  # B, S, D
 
-    def train_tokenizer(self, tokenizer):
-        self.tokenizer.train()
-
-    def forward(self, input_text):
-        # raw input text -> tokenization -> embedding -> num_layers Transformer block
+    def forward(self, token_ids):
+        # embedding -> num_layers Transformer block
         # -> Norm -> Linear -> softmax -> output logits
-        token_ids = self.tokenizer.encode(input_text)  # B, S
         # go through num_layers transformer blocks
+        # token_ids: B S
         x = self.embedding(token_ids)  # B, S, D
         for xb in self.transformer_blocks:
             x = xb(x)  # B, S, D
